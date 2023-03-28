@@ -24,17 +24,17 @@ bool DEBUG;
 // ******* Initialize public parameters ********
 void init(){
 
-	DEBUG = true;
-	n = 2;   //
-	t = 4;    //
-	d = 2;    //
-	m = (d+1)*t+1;    //m=(d+1)t+1
-
+	// DEBUG = true;
+	DEBUG = false;
+	n = 2;    // length of data
+	t = 4;    // privacy threshold
+	d = 2;    // degree of polynomial f
+	m = (d+1)*t+1;    // number of servers
     flint_randinit(state);
 
 	fmpz_init(p);
-    // fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit
-    fmpz_set_str(p,"11",10);
+    fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit prime
+    // fmpz_set_str(p,"17",10);
     fmpz_mod_ctx_init(univarctx,p);
     fmpz_mod_mpoly_ctx_init(nvarsctx,n,ORD_LEX,p);
 }
@@ -82,8 +82,6 @@ void Share(fmpz_t * x, fmpz_t ** s){
 			fmpz_mod_poly_print_pretty(phi[i],"X",univarctx);
 			printf("\n");
 		}
-
-
 	}
 
 }
@@ -121,7 +119,6 @@ void Eval(int j,fmpz_mod_mpoly_t f,fmpz_t * s_j,fmpz_t out_j){
 void L_interpolation(fmpz_t * locs, fmpz_t * vals, fmpz_t res){
 	// locs[1..m]
 	// vals[1..m]
-	printf("here\n");
 
 
 	fmpz_mod_poly_t L[m + 1];
@@ -133,7 +130,6 @@ void L_interpolation(fmpz_t * locs, fmpz_t * vals, fmpz_t res){
 	fmpz_init_set_ui(_sum, 0);
 	fmpz_init_set_ui(zero, 0);
 
-	printf("here\n");
 
 
 	// Compute L[i] (L_i(0))
@@ -148,8 +144,33 @@ void L_interpolation(fmpz_t * locs, fmpz_t * vals, fmpz_t res){
 				fmpz_init_set(roots[k - 2], locs[k]); // vector roots should start at index 0
 			}
 		}
-		printf("here, i = %d\n", i);
+		if (DEBUG){
+			printf("i = %d\n", i);
+			printf("roots = ");
+			for (int k = 0; k < m - 2; k ++){
+				fmpz_print(roots[k]);
+				printf(" ");
+			}
+			printf("\n");
+		}
+	
 		fmpz_mod_poly_product_roots_fmpz_vec(L[i], roots, m - 1, univarctx);     
+		
+		if (DEBUG){
+			printf("L_%d(X) = ", i);
+			fmpz_mod_poly_print_pretty(L[i],"X", univarctx);
+			printf("\n");
+
+			for (int j = 1; j <= m; j ++){
+				fmpz_mod_poly_evaluate_fmpz(temp, L[i], locs[j], univarctx);
+
+				printf("L_%d(",i);
+				fmpz_print(locs[j]);
+				printf(")=");
+				fmpz_print(temp);
+				printf("\n");
+			}
+		}
 		fmpz_mod_poly_evaluate_fmpz(temp, L[i], locs[i], univarctx);
 		fmpz_mod_poly_scalar_div_fmpz(L[i], L[i], temp, univarctx); // normalize
 	}
@@ -187,14 +208,11 @@ int Ver(fmpz_t * out, fmpz_t y){
 		fmpz_init_set_ui(locs[i],i);
 	}
 	
-	printf("here\n");
 	fmpz_t psiout[m + 1];
 	for (int i = 1; i <= m; i ++){
-		printf("i = %d\n", i);
 		fmpz_mod_poly_evaluate_fmpz(temp,psi,locs[i],univarctx); //temp = psi(loc[i])
 		fmpz_mod_mul(psiout[i],temp,out[i],univarctx);          //psiout[i] = psi(loc[i])*out[i]
 	}
-	printf("there\n");
 
 	fmpz_t z;
 	fmpz_init(z);
@@ -300,6 +318,43 @@ int main(){
     fmpz_t y;
     fmpz_init(y);
     IsCorrect = Ver(out,y);
+
+
+
+    printf("****************\n");
+    printf("x = ");
+    for (int i = 1; i <= n; i ++){
+        fmpz_print(x[i]);
+        printf(" ");
+    }
+    printf("\n");
+
+
+	char ** str = (char **)malloc(sizeof(char *) * n);
+	for (int i = 0; i < n; i ++){
+		str[i] = malloc(sizeof(char) * 10);
+		sprintf(str[i], "X_%d", i);
+	}
+	printf("f = ");
+	fmpz_mod_mpoly_print_pretty(f, (const char **)str, nvarsctx);
+	printf("\n");
+
+	fmpz_t res;
+	fmpz_init(res);
+    fmpz ** valx;
+    valx=FLINT_ARRAY_ALLOC(n,fmpz *);
+    for(int i=0;i<n;++i){
+        valx[i]=FLINT_ARRAY_ALLOC(1,fmpz);
+        fmpz_init_set(valx[i],x[i+1]);
+    }	
+	fmpz_mod_mpoly_evaluate_all_fmpz(res, f, valx, nvarsctx);
+    printf("f(x) = ");
+    fmpz_print(res);
+    printf("\n");
+    printf("y = ");
+    fmpz_print(y);
+    printf("\n");
+    printf("IsCorrect = %d\n",IsCorrect);
 
     return 0;
 }
