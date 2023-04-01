@@ -22,12 +22,12 @@ flint_rand_t state;
 bool DEBUG;
 
 // ******* Initialize public parameters ********
-void init(){
+void init(int nn){
 
 	// DEBUG = true;
 	DEBUG = false;
-	n = 2;    // length of data
-	t = 4;    // privacy threshold
+	n = nn;    // length of data
+	t = 3;    // privacy threshold
 	d = 2;    // degree of polynomial f
 	m = ((d+1)*t+2) / 2;    // number of servers
 	if (m <= 2 * t + 1) {
@@ -404,7 +404,12 @@ int H_Ver(fmpz_t * out1, fmpz_t ** out2, fmpz_t *** out3, fmpz_t y){
 
 
 int main(){
-	init();  // Initialize public parameters
+	for (int nn = 200; nn <= 2000; nn = nn + 200){
+	for (int nnn = 1; nnn <= 5; nnn ++){
+    	printf("***************************************************************\n n = %d \n",nn);
+    	printf("times = %d\n",nnn);
+
+	init(nn);  // Initialize public parameters
 	
 	// Data x
     fmpz_t * x=malloc(sizeof(fmpz_t) * (n+1));
@@ -513,7 +518,16 @@ int main(){
 
     // Share
     printf("***Sharing***\n");
+	clock_t share_start,share_end;
+	double share_time = 0;
+
+	share_start = clock();
 	H_Share(x,in,in2);
+	share_end = clock();
+	share_time = (double) (share_end- share_start)/CLOCKS_PER_SEC;
+    printf("Time of Share: %f ms\n",share_time*1000);
+
+
 
     for(int k = 1; k <= t; k ++){
 	    for(int j = 1;j <= m; j ++){
@@ -527,15 +541,21 @@ int main(){
 	printf("***Evaling***\n");	
 
 	clock_t eval_start,eval_end;
-    eval_start=clock();
+	double eval_time;
+    eval_time = 0;
 
+    double total_eval_time = 0;
 	for (int j = 1;j <= m; j ++){
+	    eval_start=clock();
         H_Eval(j,f,in[j],in3[j], out1[j], out2[j], out3[j]);
+	    eval_end=clock();
+	    total_eval_time += (double) (eval_end-eval_start)/CLOCKS_PER_SEC;
+	    if ( (double) (eval_end-eval_start)/CLOCKS_PER_SEC > eval_time ) {
+	    	eval_time = (double) (eval_end-eval_start)/CLOCKS_PER_SEC;
+	    }
     }
-
-    eval_end=clock();
-    double eval_time= (double) (eval_end-eval_start)/CLOCKS_PER_SEC;
     printf("Time of Eval: %f ms\n",eval_time*1000);
+    printf("Time of total Eval: %f ms\n",total_eval_time*1000);
 
 
     // Ver
@@ -551,8 +571,8 @@ int main(){
     printf("Time of Dec: %f ms\n",dec_time*1000);
 
 
-
-
+    if (DEBUG)
+    {
     printf("****************\n");
     printf("x = ");
     for (int i = 1; i <= n; i ++){
@@ -587,7 +607,7 @@ int main(){
     fmpz_print(y);
     printf("\n");
     printf("IsCorrect = %d\n",IsCorrect);
-
+	}
 
 	fmpz_t fx;
     fmpz_init(fx);
@@ -605,7 +625,8 @@ int main(){
     double fx_time= (double) (fx_end-fx_start)/CLOCKS_PER_SEC;
     printf("Time of directly eval f(x): %f ms\n",fx_time*1000);
 
-
+	}
+	}
     return 0;
 }
 
