@@ -28,7 +28,7 @@ void init(int nn, int dd){
 	// DEBUG = true;
 	DEBUG = false;
 	n = nn;           // length of data
-	t = 1;            // privacy threshold
+	t = 2;            // privacy threshold
 	d = dd;            // degree of polynomial f
 	m = (d+1)*t+1;    // number of servers
     flint_randinit(state);
@@ -39,7 +39,6 @@ void init(int nn, int dd){
     // fmpz_set_str(p,"7",10);
     fq_ctx_init(Fp,p,1,"gen");
 	fmpz_clear(p);
-
 }
 
 
@@ -62,8 +61,15 @@ void L_Share(fq_mat_t x, fq_mat_t * s){
 	fq_poly_t phi[n];
 	for (int i = 0; i < n; i ++){
 		fq_poly_init(phi[i],Fp);
-		fq_poly_randtest(phi[i],state,t + 1,Fp);
-		fq_poly_set_coeff(phi[i],0,fq_mat_entry(x,i,0),Fp);	
+
+		fq_poly_set_coeff(phi[i],0,fq_mat_entry(x,i,0),Fp);
+		for (int k = 1; k <= t; k ++){
+			fq_set_ui(temp, 0, Fp);
+			while (fq_is_zero(temp, Fp)){
+				fq_randtest(temp, state, Fp);
+			}
+			fq_poly_set_coeff(phi[i], k, temp, Fp);
+		}	
 	}
 
 	/*
@@ -79,6 +85,10 @@ void L_Share(fq_mat_t x, fq_mat_t * s){
 
 
 	if (DEBUG) {
+		printf("**Debuging in L_share**:\n");
+		printf("x = ");
+		fq_mat_print_pretty(x, Fp);
+		printf("\n");
 		for (int i = 0; i < n; i ++){
 			printf("phi_%d=",i);
 			fq_poly_print_pretty(phi[i],"X",Fp);
@@ -95,94 +105,83 @@ void L_Share(fq_mat_t x, fq_mat_t * s){
 
 // ************ Eval algorithm *********************
 
+void next(int _length, int a[]){
+	a[_length - 1] += 1;
+	for (int i = _length - 1; i >= 1; i --){
+		if (a[i] >= n) {
+			a[i - 1] += 1;
+			for (int j = i; j <= _length - 1; j ++){
+				a[j] = a[i - 1];
+			}
+		}
+	}
+}
+
 // eval an n-variate degree-d function f(x), output y=f(x)
 void Eval(fq_mat_t f, fq_mat_t x, fq_t y){
 
 	int index=0; //index of f
+	fq_t y1;
+   	fq_init(y1,Fp);
+
+	int a[d]; 
+	for (int i = 0; i < d; i ++){
+		a[i] = 0;
+	}
+
+	while ( (a[0] < n) & (index < N) ){
+		fq_set(y1,fq_mat_entry(f,index,0),Fp);
+		for (int j = 0; j < d; j ++){
+			fq_mul(y1,y1,fq_mat_entry(x,a[j],0),Fp);
+		}
+		fq_add(y,y,y1,Fp);
+		next(d,a);
+		index += 1;
+	}
+
+}
+
+void Eval_diff(fq_mat_t f, fq_mat_t x, int _index,fq_t y){
+	// set y = df(X)/d(X[_index]) | X=x
+
+	int index=0; //index of f
+	fq_t y1;
+   	fq_init(y1,Fp);
 
     // constant term
 	if(d>=0){
 		fq_set(y,fq_mat_entry(f,0,0),Fp);
 	}
 
-	fq_t y1;
-   	fq_init(y1,Fp);
-
-	// degree-1 terms
-	if(d>=1){
-		for(int i1=0;i1<n;i1++){
-			index=index+1;
+	// degree-1 to degree-d terms 
+	int a[d];
+	for (int _d = 1; _d <= d; _d ++){
+		for (int i = 0; i < d; i ++){
+			a[i] = 0;
+		}
+		while (a[0] < n){
+			index += 1;
 			fq_set(y1,fq_mat_entry(f,index,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i1,0),Fp);
+			ulong count = 0;
+			for (int j = 0; j < _d; j ++){
+				if (a[j] == _index){
+					count ++;
+					if (count != 1){
+						fq_mul(y1,y1,fq_mat_entry(x,a[j],0),Fp);				
+					}
+				}
+				else{
+					fq_mul(y1,y1,fq_mat_entry(x,a[j],0),Fp);
+				}
+			}
+			fq_mul_ui(y1, y1, count, Fp);
 			fq_add(y,y,y1,Fp);
+			next(_d,a);
 		}
 	}
-
-	// degree-2 terms
-	if(d>=2){
-		for(int i1=0;i1<n;i1++)
-		for(int i2=i1;i2<n;i2++)
-		{
-			index=index+1;
-			fq_set(y1,fq_mat_entry(f,index,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i1,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i2,0),Fp);
-			fq_add(y,y,y1,Fp);
-		}
-	}
-
-	// degree-3 terms
-	if(d>=3){
-		for(int i1=0;i1<n;i1++)
-		for(int i2=i1;i2<n;i2++)
-		for(int i3=i2;i3<n;i3++)
-		{
-			index=index+1;
-			fq_set(y1,fq_mat_entry(f,index,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i1,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i2,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i3,0),Fp);
-			fq_add(y,y,y1,Fp);
-		}
-	}
-
-	// degree-4 terms
-	if(d>=4){
-		for(int i1=0;i1<n;i1++)
-		for(int i2=i1;i2<n;i2++)
-		for(int i3=i2;i3<n;i3++)
-		for(int i4=i3;i4<n;i4++)
-		{
-			index=index+1;
-			fq_set(y1,fq_mat_entry(f,index,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i1,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i2,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i3,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i4,0),Fp);
-			fq_add(y,y,y1,Fp);
-		}
-	}
-
-	// degree-5 terms
-	if(d>=5){
-		for(int i1=0;i1<n;i1++)
-		for(int i2=i1;i2<n;i2++)
-		for(int i3=i2;i3<n;i3++)
-		for(int i4=i3;i4<n;i4++)
-		for(int i5=i4;i5<n;i5++)
-		{
-			index=index+1;
-			fq_set(y1,fq_mat_entry(f,index,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i1,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i2,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i3,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i4,0),Fp);
-			fq_mul(y1,y1,fq_mat_entry(x,i5,0),Fp);
-			fq_add(y,y,y1,Fp);
-		}
-	}
-
 }
+
+
 
 void L_Eval(int j,fq_mat_t f,fq_mat_t s_j,fq_t out_j){
 	// f: input length-n
@@ -196,9 +195,6 @@ void L_Eval(int j,fq_mat_t f,fq_mat_t s_j,fq_t out_j){
 // ************ Ver algorithm **********************
 
 void La_intpoly_coeff(fq_mat_t L0){
-	//interpolate f such that f(j)=y(j), return res=f(0)
-	// locs[1..m]
-	// vals[1..m]
 
 	// compute L_j(0) (:=fq_mat_entry(L0,j,0))
 	fq_t ksubj;
@@ -292,19 +288,50 @@ int main(){
 	n_list[7] = 15;
 	n_list[8] = 13;
 
-    for (int index = 0; index <= 3; index ++){
-		int nn = n_list[index];
-		int dd = index + 2;
-		printf("n = %d, d = %d\n", nn,dd);
+	int new_n_list[7];
+	int new_d_list[7];
+	new_n_list[0] = 11; new_d_list[0] = 12;
+	new_n_list[1] = 10; new_d_list[1] = 13;
+	new_n_list[2] = 9; new_d_list[2] = 15;
+	new_n_list[3] = 8; new_d_list[3] = 17;
+	new_n_list[4] = 7; new_d_list[4] = 21;
+	new_n_list[5] = 6; new_d_list[5] = 27;
+	new_n_list[6] = 5; new_d_list[6] = 39;
+
+	ulong NN = 200000;
+	FILE *infp = fopen("input_size.o","w");
+	FILE *outfp = fopen("output_size.o","w");
+
+    for (int index = 1; index <= 10; index ++){
+		// int nn = n_list[index];
+		// int dd = index + 2;
+		// int nn = new_n_list[index];
+		// int dd = new_d_list[index];
+    	// int nn = 2000;
+    	int nn = 2000;
+    	int dd = 2;
+    	// N = NN * index;
+    	N = 20;
+
+		printf("n = %d, d = %d, N = %ld\n", nn, dd, N);
 
 	    for (int times = 1; times <= 5; times ++){
-
+	    	printf("times = %d\n", times);
 			init(nn,dd);  // Initialize public parameters
 			
+			fq_t temp;
+			fq_init(temp, Fp);
+
 			// Data x
 		    fq_mat_t x;
 			fq_mat_init(x,n,1,Fp);
-		    fq_mat_randtest(x,state,Fp);
+		    for (int i = 0; i < n ; i ++){
+		    	fq_set_ui(temp, 0, Fp);
+		    	while (fq_is_zero(temp, Fp)){
+		    		fq_randtest(temp, state, Fp);
+		    	}
+		    	fq_set(fq_mat_entry(x, i, 0), temp, Fp);
+		    }
 		      
 		    if (DEBUG) {
 			    printf("x: ");
@@ -314,16 +341,16 @@ int main(){
 		    
 		    // Shares s_1,...,s_j (in_j)
 			fq_mat_t * in;
-		    in=malloc(sizeof(fmpz_mat_t)*m);
+		    in=malloc(sizeof(fq_mat_t)*m);
 		    for(int j = 0;j < m; j ++)
 				fq_mat_init(in[j],n,1,Fp);
 
 		    // n-variate function f of degree d
 			// N=C(n+d,d) is the number of monomials in f
-			fmpz_t Nm;
-			fmpz_init(Nm);
-			fmpz_bin_uiui(Nm,n+d,d);
-			N=fmpz_get_ui(Nm);
+			// fmpz_t Nm;
+			// fmpz_init(Nm);
+			// fmpz_bin_uiui(Nm,n+d,d);
+			// N=fmpz_get_ui(Nm);
 
 		    fq_mat_t f;
 			fq_mat_init(f,N,1,Fp);
@@ -375,13 +402,13 @@ int main(){
 
 		    // Ver
 		    // printf("***Verifying***\n");
-
+		    
 			//preprocess Lagrange interpolation coefficients
 			fq_mat_t L0;
 			fq_mat_init(L0,m,1,Fp);
 			// fq_mat_entry(L0,j,0): L_j(0)= \prod_{k=1,k!=j}^m k/(k-j)
 			La_intpoly_coeff(L0); 
-
+			
 			if (DEBUG) {
 				printf("L_1(0)..L_m(0):");
 				fq_mat_print_pretty(L0,Fp);
@@ -441,6 +468,12 @@ int main(){
 		    for(int j = 0;j < m; j ++)
 				fq_mat_clear(in[j],Fp);
 		}
+		fprintf(infp,"\n\n\n");
+		fprintf(outfp,"\n\n\n");
 	}
+
+	fclose(infp);
+	fclose(outfp);
+
     return 0;
 }
