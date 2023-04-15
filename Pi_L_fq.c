@@ -299,8 +299,8 @@ int main(){
 	new_n_list[6] = 5; new_d_list[6] = 39;
 
 	ulong NN = 200000;
-	FILE *infp = fopen("input_size.o","w");
-	FILE *outfp = fopen("output_size.o","w");
+	FILE *infp = fopen("input_size.out","w");
+	FILE *outfp = fopen("output_size.out","w");
 
     for (int index = 1; index <= 10; index ++){
 		// int nn = n_list[index];
@@ -308,10 +308,10 @@ int main(){
 		// int nn = new_n_list[index];
 		// int dd = new_d_list[index];
     	// int nn = 2000;
-    	int nn = 2000;
+    	int nn = 100 * index;
     	int dd = 2;
     	// N = NN * index;
-    	N = 20;
+    	N = nn * (nn + 1) / 2;
 
 		printf("n = %d, d = %d, N = %ld\n", nn, dd, N);
 
@@ -402,18 +402,17 @@ int main(){
 
 		    // Ver
 		    // printf("***Verifying***\n");
-		    
+
 			//preprocess Lagrange interpolation coefficients
 			fq_mat_t L0;
 			fq_mat_init(L0,m,1,Fp);
 			// fq_mat_entry(L0,j,0): L_j(0)= \prod_{k=1,k!=j}^m k/(k-j)
 			La_intpoly_coeff(L0); 
-			
+
 			if (DEBUG) {
 				printf("L_1(0)..L_m(0):");
 				fq_mat_print_pretty(L0,Fp);
 			}  
-			
 			
 
 		    int IsCorrect;
@@ -454,6 +453,11 @@ int main(){
 		    double fx_time= (double) (fx_end-fx_start)/CLOCKS_PER_SEC;
 		    printf("Time of directly eval f(x): %f ms\n",fx_time*1000);
 
+		    // communication cost
+		    for (int j = 0; j < m; j ++){
+		    	fq_mat_fprint(infp, in[j], Fp);
+		    	fq_fprint(outfp, out[j], Fp);
+		    }
 
 			// clear memory
 		    fq_mat_clear(f,Fp);

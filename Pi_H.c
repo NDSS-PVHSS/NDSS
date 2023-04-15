@@ -24,8 +24,8 @@ bool DEBUG;
 // ******* Initialize public parameters ********
 void init(int nn){
 
-	// DEBUG = true;
-	DEBUG = false;
+	DEBUG = true;
+	// DEBUG = false;
 	n = nn;    // length of data
 	t = 3;    // privacy threshold
 	d = 2;    // degree of polynomial f
@@ -36,8 +36,8 @@ void init(int nn){
     flint_randinit(state);
 
 	fmpz_init(p);
-    fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit prime
-    // fmpz_set_str(p,"97",10);
+    // fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit prime
+    fmpz_set_str(p,"97",10);
     fmpz_mod_ctx_init(univarctx,p);
     fmpz_mod_mpoly_ctx_init(nvarsctx,n,ORD_LEX,p);
 }
@@ -51,7 +51,7 @@ void L_interpolation(fmpz_t * locs, fmpz_t * vals, fmpz_t res);
 void H_Share(fmpz_t * x, fmpz_t ** s, fmpz_t *** ss){
 	// x[1..n];
 	// s[1..m][1..n];
-	// ss[1..t][1..m][1..n]
+	// ss[1..t][1..m][1..n];
 
 	fmpz_t temp;
 	fmpz_init(temp);
@@ -202,7 +202,7 @@ void H_interpolation(fmpz_t * locs, fmpz_t * vals, fmpz_t * dif_vals, fmpz_t res
 		if (DEBUG){
 			printf("j = %d\n", j);
 			printf("roots = ");
-			for (int k = 0; k < m - 2; k ++){
+			for (int k = 0; k <= m - 2; k ++){
 				fmpz_print(roots[k]);
 				printf(" ");
 			}
@@ -291,7 +291,6 @@ int H_Ver(fmpz_t * out1, fmpz_t ** out2, fmpz_t *** out3, fmpz_t y){
 	fmpz_t temp;
 	fmpz_init(temp);
 
-
 	fmpz_t ** r = malloc(sizeof(fmpz_t *) * (t + 1));
 	for (int k = 1; k <= t; k ++){
 		r[k] = malloc(sizeof(fmpz_t) * (n + 1));
@@ -300,7 +299,7 @@ int H_Ver(fmpz_t * out1, fmpz_t ** out2, fmpz_t *** out3, fmpz_t y){
 		}
 	}
 
-	fmpz_t * temp_vec = malloc(sizeof(fmpz_t) * m);
+	fmpz_t * temp_vec = malloc(sizeof(fmpz_t) * (m + 1));
 	int IsCorrect;
 	for (int k = 1; k <= t; k ++){
 		for (int i = 1; i <= n; i ++){
@@ -311,7 +310,6 @@ int H_Ver(fmpz_t * out1, fmpz_t ** out2, fmpz_t *** out3, fmpz_t y){
 			if (IsCorrect == 0) {return 0;}
 		}
 	}
-
 
 
 	// phi_ij[i][j] = phi'_i(j)
@@ -404,8 +402,8 @@ int H_Ver(fmpz_t * out1, fmpz_t ** out2, fmpz_t *** out3, fmpz_t y){
 
 
 int main(){
-	for (int nn = 200; nn <= 2000; nn = nn + 200){
-	for (int nnn = 1; nnn <= 5; nnn ++){
+	for (int nn = 3; nn <= 200; nn = nn + 200){
+	for (int nnn = 1; nnn <= 1; nnn ++){
     	printf("***************************************************************\n n = %d \n",nn);
     	printf("times = %d\n",nnn);
 

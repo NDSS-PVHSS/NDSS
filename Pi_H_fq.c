@@ -27,9 +27,9 @@ typedef struct{
 	fq_mat_t * a;
 } input_struct;
 
-typedef struct{
+// typedef struct{
 
-} output_struct;
+// } output_struct;
 
 // ******* Initialize public parameters ********
 void init(int nn, int dd){
@@ -43,14 +43,6 @@ void init(int nn, int dd){
 	if (m <= 2 * t + 1) {
 		m = 2 * t + 1;
 	}
-    flint_randinit(state);
-
-    fmpz_t p;
-	fmpz_init(p);
-    // fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit prime
-    fmpz_set_str(p,"17",10);
-	fq_ctx_init(Fp,p,1,"gen");
-	fmpz_clear(p);
 }
 
 void L_Share(fq_mat_t x, fq_mat_t * s);
@@ -179,10 +171,43 @@ void H_Eval(int j,fq_mat_t f,fq_mat_t s_j,fq_t y_j, fq_mat_t sigma_j){
 
 
 
+void He_intpoly_coeff(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0){
+	// compute H_j(0) and \bar H_j(0)
 
-void He_intpoly_coeff(fq_mat_t H0, fq_mat_t _H0){
+	fq_t temp;
+	fq_t jsubk;
+	fq_t Lsquare;
+	fq_t Lj;
 
+	fq_init(temp, Fp);
+	fq_init(jsubk, Fp);
+	fq_init(Lsquare, Fp);
+	fq_init(Lj, Fp);
 
+	for (int j = 0; j < m; j ++){
+		fq_mul(Lsquare, fq_mat_entry(L0, j, 0), fq_mat_entry(L0, j, 0), Fp); 
+		
+		fq_set_ui(Lj, 2 * (j + 1), Fp);
+		for (int k = 0; k < m; k ++){
+			if (k != j){
+				fq_set_si(jsubk, j - k, Fp);
+				fq_inv(temp, jsubk, Fp);
+				fq_mul(Lj, Lj, temp, Fp);
+			}
+		}
+
+		fq_mul(fq_mat_entry(H0, j, 0), Lj, fq_mat_entry(L0, j, 0), Fp);
+		fq_add(fq_mat_entry(H0, j, 0), fq_mat_entry(H0, j, 0), Lsquare, Fp);
+		// H_j(0)=(1+2j L'_j(j))(L_j(0))^2
+		fq_set_si(temp, -(j + 1) , Fp);
+		fq_mul(fq_mat_entry(_H0, j, 0), temp, Lsquare, Fp);
+		// \bar H_j(0) = (-j)(L_j(0))^2
+	}
+
+	fq_clear(temp, Fp);
+	fq_clear(jsubk, Fp);
+	fq_clear(Lsquare, Fp);
+	fq_clear(Lj, Fp);
 }
 
 
@@ -190,13 +215,12 @@ void He_intpoly_coeff(fq_mat_t H0, fq_mat_t _H0){
 int H_Ver(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0, fq_t * out, fq_mat_t * out2, fq_mat_t ** out3, fq_t y){
 	// out[m]
 	// out2[m][n]
-	// out3[m][t][n]
+	// out3[t][m][n]
 	// return 1 if y is correct; otherwise return 0
 	
 	fq_t zero;
 	fq_init(zero,Fp);
 	fq_zero(zero,Fp);
-	fq_clear(zero,Fp);
 
 
 	fq_t temp;
@@ -211,13 +235,13 @@ int H_Ver(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0, fq_t * out, fq_mat_t * out2, f
 			fq_init(r[k][i], Fp);
 		}
 	}
-
 	fq_t *  temp_vec = malloc(sizeof(fq_t) * m);
 	int IsCorrect;
 	for (int k = 0; k < t; k ++){
 		for (int i = 0; i < n; i ++){
 			for (int j = 0; j < m; j ++){
-				fq_init_set(temp_vec[j], out3[j][k]);
+				fq_init(temp_vec[j], Fp);
+				fq_set(temp_vec[j], fq_mat_entry(out3[k][j], i, 0), Fp);
 			}
 			IsCorrect = L_Ver(L0, temp_vec, r[k][i]);
 		}
@@ -253,7 +277,7 @@ int H_Ver(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0, fq_t * out, fq_mat_t * out2, f
 	fq_poly_init(dpsi, Fp);
 
 	fq_poly_randtest(psi, state, t + 1, Fp);
-	fq_poly_set_coeff_ui(psi, 0, 0, Fp);
+	fq_poly_set_coeff(psi, 0, zero, Fp);
 	fq_poly_derivative(dpsi, psi, Fp);
 
 	fq_t * dif_vals_y = malloc(sizeof(fq_t) * m);
@@ -276,7 +300,7 @@ int H_Ver(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0, fq_t * out, fq_mat_t * out2, f
 		for (int i = 0; i < n; i ++){
             fq_poly_evaluate_fq(temp2,psi,temp,Fp);			// psi(j)
             fq_mul(temp2, temp2, dphi[i][j], Fp);			// phi'_i(j)psi(j)
-            fq_mul(temp2, temp2, fq_mat_entry(out2[j]), Fp);// phi'_i(j)psi(j)f'_i(s_j)
+            fq_mul(temp2, temp2, fq_mat_entry(out2[j], i, 0), Fp);// phi'_i(j)psi(j)f'_i(s_j)
             fq_add(dif_vals_z[j], dif_vals_z[j], temp2, Fp);
 		}		
 	    fq_poly_evaluate_fq(temp2,dpsi,temp,Fp);			// psi'(j)
@@ -310,24 +334,55 @@ int H_Ver(fq_mat_t L0, fq_mat_t H0, fq_mat_t _H0, fq_t * out, fq_mat_t * out2, f
 	fq_init(z,Fp);
 	fq_zero(z,Fp);	
 	for(int j = 0; j < m; j++){
-		fq_mul(temp,psiout[j],fq_mat_entry(L0,j,0),Fp);
+		fq_mul(temp, psiy[j],fq_mat_entry(H0,j,0),Fp);
+		fq_add(z,z,temp,Fp);
+
+		fq_mul(temp, dif_vals_z[j] ,fq_mat_entry(_H0,j,0),Fp);
 		fq_add(z,z,temp,Fp);
 	}
-	
+		
 	int res = fq_is_zero(z,Fp);
 
+
+
+	fq_poly_clear(dpsi, Fp);
 	fq_poly_clear(psi, Fp);
 	fq_clear(temp, Fp);
+	fq_clear(temp2, Fp);
+	fq_clear(zero,Fp);
 	fq_clear(z, Fp);
-	for (int j = 0; j < m; j ++){
-		fq_clear(psiout[j], Fp);
+	for (int k = 0; k < t; k ++){
+		for (int i = 0; i < n; i ++){
+			fq_clear(r[k][i], Fp);
+		}
 	}
-
+	for(int j = 0; j < m; j ++){
+		fq_clear(psiy[j],Fp);
+		fq_clear(dif_vals_z[j], Fp);
+		fq_clear(dif_vals_y[j], Fp);
+	}
+	for (int i = 0; i < n; i ++){
+		for (int j = 0; j < m; j ++){
+			fq_clear(dphi[i][j], Fp);
+		}
+	}
+	for (int j = 0; j < m; j ++){
+		fq_clear(temp_vec[j], Fp);
+	}			
 	return res;
 }
 
 
 int main(){
+    flint_randinit(state);
+
+    fmpz_t p;
+	fmpz_init(p);
+    fmpz_set_str(p,"340282366920938463463374607431768211297",10);  // 128 bit prime
+    // fmpz_set_str(p,"17",10);
+	fq_ctx_init(Fp,p,1,"gen");
+	fmpz_clear(p);
+
 	int n_list[9];
 	n_list[0] = 1413;
 	n_list[1] = 180;
@@ -339,7 +394,7 @@ int main(){
 	n_list[7] = 15;
 	n_list[8] = 13;
 
-		int new_n_list[7];
+	int new_n_list[7];
 	int new_d_list[7];
 	new_n_list[0] = 11; new_d_list[0] = 12;
 	new_n_list[1] = 10; new_d_list[1] = 13;
@@ -349,20 +404,25 @@ int main(){
 	new_n_list[5] = 6; new_d_list[5] = 27;
 	new_n_list[6] = 5; new_d_list[6] = 39;
 
-	ulong NN = 200000;
+	ulong NN = 200;
+	FILE *infp = fopen("input_size.out","w");
+	FILE *outfp = fopen("output_size.out","w");
 
 
 	for (int index = 1; index <= 10; index ++){
 		// int nn = n_list[index];
 		// int dd = index + 2;
-		int nn = 2000;
+		int nn = 100 * index;
     	int dd = 2;
-    	N = NN * index;
+    	// N = NN * index;
+    	N = nn * (nn + 1) / 2;
+
 
 		printf("n = %d, d = %d, N = %ld\n", nn, dd, N);
 
 	    for (int times = 1; times <= 5; times ++){
 	    	printf("times = %d\n", times);
+
 			init(nn,dd);  // Initialize public parameters
 
 			fq_t temp;
@@ -379,7 +439,8 @@ int main(){
 		    	fq_set(fq_mat_entry(x, i, 0), temp, Fp);
 		    }
 		    // fq_mat_randtest(x,state,Fp);
-		      
+		     
+
 		    if (DEBUG) {
 			    printf("x: ");
 			    fq_mat_print_pretty(x,Fp);
@@ -460,14 +521,16 @@ int main(){
 
 			
 			// // Verify
-			// fq_mat_t H0, _H0;
-			// fq_mat_init(H0,m,1,Fp);
-			// fq_mat_init(_H0,m,1,Fp);
-			// // L_j(u) = \prod_{k=1,k!=j}^m (k-u)/(k-j)
-			// // fq_mat_entry(H0,j,0): H_j(0)= (1-2(u-j) L'_j(j))L_j^2(0)
-			// // fq_mat_entry(_H0,j,0): \bar H_j(0) = ( -j) L_j^2(0)
-
-			// He_intpoly_coeff(H0,H0); 
+			fq_mat_t L0, H0, _H0;
+			fq_mat_init(L0,m,1,Fp);
+			fq_mat_init(H0,m,1,Fp);
+			fq_mat_init(_H0,m,1,Fp);
+			// L_j(u) = \prod_{k=1,k!=j}^m (k-u)/(k-j)
+			// fq_mat_entry(H0,j,0): H_j(0)= (1-2(u-j) L'_j(j))L_j^2(0)
+			// fq_mat_entry(_H0,j,0): \bar H_j(0) = ( -j) L_j^2(0)
+						
+			La_intpoly_coeff(L0);
+			He_intpoly_coeff(L0,H0,_H0); 
 
 			// if (DEBUG) {
 			// 	printf("L_1(0)..L_m(0):");
@@ -476,19 +539,23 @@ int main(){
 			
 			
 
-		    // int IsCorrect;
-		    // fq_t y;
-		    // fq_init(y,Fp);
-		    // clock_t Ver_start,Ver_end;
-		    // Ver_start=clock();
-		    // IsCorrect = L_Ver(L0,out,y);
-		    // Ver_end=clock();
+		    int IsCorrect;
+		    fq_t y;
+		    fq_init(y,Fp);
+		    clock_t Ver_start,Ver_end;
+		    Ver_start=clock();
+		    IsCorrect = H_Ver(L0, H0,_H0, out, out2, in2 ,y);
+		    Ver_end=clock();
 			
-			// if (DEBUG) {
-			// 	printf("Ac? %d, y=",IsCorrect);
-			// 	fq_print_pretty(y,Fp);
-			// 	printf("\n");
-			// }
+			if (DEBUG) {
+				printf("Ac? %d, y=",IsCorrect);
+				fq_print_pretty(y,Fp);
+				printf("\n");
+			}
+
+		    double Ver_time= (double) (Ver_end-Ver_start)/CLOCKS_PER_SEC;
+		    printf("Time of Ver: %f ms\n",Ver_time*1000);
+
 
 			fq_t fx;
 		    fq_init(fx,Fp);
@@ -506,6 +573,19 @@ int main(){
 
 		    double fx_time= (double) (fx_end-fx_start)/CLOCKS_PER_SEC;
 		    printf("Time of directly eval f(x): %f ms\n",fx_time*1000);
+
+		    // communication cost
+		    for (int j = 0; j < m; j ++){
+		    	fq_mat_fprint(infp, in[j], Fp);
+		    	for (int k = 0; k < t; k ++){
+		    		fq_mat_fprint(infp, in2[k][j], Fp);
+		    	}
+		    	fq_fprint(outfp, out[j], Fp);
+				fq_mat_fprint(outfp, out2[j], Fp);
+				for (int k = 0; k < t; k ++){
+					fq_mat_fprint(outfp, in2[k][j], Fp);
+				}		    	
+		    }
 
 
 			// clear memory
@@ -527,10 +607,12 @@ int main(){
 
 
 	    }
-
+		fprintf(infp,"\n\n\n");
+		fprintf(outfp,"\n\n\n");
 	}
 
-
+	fclose(infp);
+	fclose(outfp);
 
     return 0;
 }
